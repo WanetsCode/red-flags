@@ -232,49 +232,80 @@ chrome.action.onClicked.addListener((tab) => {
       const ik = getIK();
       console.log('Extracted ik:', ik);
       
-      // Compose raw view URL
+      if (!ik) {
+        // Alternative approach: Show email content directly in Gmail
+        console.log('No ik found, using alternative approach');
+        
+        // Try to click on the email to open it, then extract content
+        try {
+          // First, try to click on the email row to open it
+          flaggedEmail.click();
+          
+          // Wait a moment for Gmail to load the email content
+          setTimeout(() => {
+            // Look for the email content in the conversation view
+            const emailContent = document.querySelector('[data-message-id]');
+            const emailBody = document.querySelector('.ii.gt div') || 
+                            document.querySelector('.ii.gt') ||
+                            document.querySelector('[data-message-id] div[dir="ltr"]');
+            
+            if (emailBody) {
+              // Create a new window to display the email content
+              const newWindow = window.open('', '_blank');
+              newWindow.document.write(`
+                <html>
+                <head>
+                  <title>Email Content - Thread ${threadId}</title>
+                  <style>
+                    body { font-family: Arial, sans-serif; margin: 20px; }
+                    .email-header { background: #f0f0f0; padding: 10px; margin-bottom: 20px; }
+                    .email-body { border: 1px solid #ccc; padding: 15px; }
+                    .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin-bottom: 20px; }
+                  </style>
+                </head>
+                <body>
+                  <div class="warning">
+                    <strong>⚠️ Email Content Analysis View</strong><br>
+                    This is a safe view of the email content without executing scripts or loading external images.
+                  </div>
+                  <div class="email-header">
+                    <strong>Thread ID:</strong> ${threadId}<br>
+                    <strong>Source:</strong> Gmail Extension Analysis
+                  </div>
+                  <div class="email-body">
+                    <h3>Email Content:</h3>
+                    <pre>${emailBody.textContent || 'Could not extract content'}</pre>
+                    <h3>Email HTML Structure:</h3>
+                    <textarea style="width: 100%; height: 200px;">${emailBody.innerHTML || 'Could not extract HTML'}</textarea>
+                  </div>
+                </body>
+                </html>
+              `);
+            } else {
+              alert('Could not extract email content. Try manually clicking on the email first.');
+            }
+          }, 2000);
+          
+          alert(`Attempting to open email content for thread ${threadId}. Please wait...`);
+          
+        } catch (error) {
+          console.error('Error opening email:', error);
+          alert(`Found thread ID: ${threadId}\nBut cannot open without ik parameter.\nTry refreshing Gmail or manually navigate to the email.`);
+        }
+        
+        return;
+      }
+
+      // Original method with ik parameter
       const baseUrl = window.location.origin;
       let rawUrl;
       
-      if (ik) {
-        // Primary method: Use ik parameter
-        if (messageId) {
-          rawUrl = `${baseUrl}/mail/u/0/?ui=2&ik=${ik}&view=om&th=${threadId}&msg=${messageId}`;
-        } else {
-          rawUrl = `${baseUrl}/mail/u/0/?ui=2&ik=${ik}&view=om&th=${threadId}`;
-        }
+      if (messageId) {
+        // More specific URL for individual message
+        rawUrl = `${baseUrl}/mail/u/0/?ui=2&ik=${ik}&view=om&th=${threadId}&msg=${messageId}`;
       } else {
-        // Alternative method: Try different Gmail URLs that might not need ik
-        console.log('No ik found, trying alternative URLs');
-        
-        // Method 1: Try Gmail's print view (sometimes works without ik)
-        rawUrl = `${baseUrl}/mail/u/0/?ui=2&view=pt&th=${threadId}`;
-        
-        // Method 2: Try basic HTML view
-        const altUrl1 = `${baseUrl}/mail/u/0/h/?th=${threadId}`;
-        
-        // Method 3: Try mobile view
-        const altUrl2 = `${baseUrl}/mail/u/0/m/?th=${threadId}`;
-        
-        // Try the first alternative, and if it fails, provide other options
-        console.log('Trying print view URL:', rawUrl);
-        
-        // Open the first URL and also alert user about alternatives
-        window.open(rawUrl, '_blank');
-        
-        // Also try opening alternative URLs
-        setTimeout(() => {
-          console.log('Also trying HTML view:', altUrl1);
-          window.open(altUrl1, '_blank');
-        }, 1000);
-        
-        setTimeout(() => {
-          console.log('Also trying mobile view:', altUrl2);
-          window.open(altUrl2, '_blank');
-        }, 2000);
-        
-        alert(`Opened multiple tabs with thread ID: ${threadId}\nTry each one to find the raw email content.`);
-        return;
+        // Fallback to thread view
+        rawUrl = `${baseUrl}/mail/u/0/?ui=2&ik=${ik}&view=om&th=${threadId}`;
       }
 
       console.log('Opening raw email:', rawUrl);
