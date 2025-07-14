@@ -9,15 +9,84 @@ chrome.action.onClicked.addListener((tab) => {
         return;
       }
 
-      // Gmail thread id stored in various possible attributes
-      const threadId = flaggedEmail.getAttribute('data-legacy-thread-id') || 
-                      flaggedEmail.getAttribute('data-thread-id') ||
-                      flaggedEmail.getAttribute('data-thread-perm-id');
+      // Debug: Log the flagged email element
+      console.log('Flagged email element:', flaggedEmail);
+      console.log('All attributes:', [...flaggedEmail.attributes].map(attr => `${attr.name}: ${attr.value}`));
+
+      // Try multiple methods to find thread ID
+      let threadId = null;
+      
+      // Method 1: Check various data attributes
+      const possibleAttributes = [
+        'data-legacy-thread-id',
+        'data-thread-id',
+        'data-thread-perm-id',
+        'data-threadid',
+        'jsdata'
+      ];
+      
+      for (const attr of possibleAttributes) {
+        const value = flaggedEmail.getAttribute(attr);
+        if (value) {
+          console.log(`Found ${attr}: ${value}`);
+          threadId = value;
+          break;
+        }
+      }
+      
+      // Method 2: Check if it's in the jsdata attribute (Gmail sometimes stores data here)
+      if (!threadId) {
+        const jsdata = flaggedEmail.getAttribute('jsdata');
+        if (jsdata) {
+          const match = jsdata.match(/thread-([a-zA-Z0-9]+)/);
+          if (match) threadId = match[1];
+        }
+      }
+      
+      // Method 3: Check parent elements
+      if (!threadId) {
+        let parent = flaggedEmail.parentElement;
+        while (parent && !threadId) {
+          for (const attr of possibleAttributes) {
+            const value = parent.getAttribute(attr);
+            if (value) {
+              threadId = value;
+              break;
+            }
+          }
+          parent = parent.parentElement;
+        }
+      }
+      
+      // Method 4: Try to extract from onclick or other event handlers
+      if (!threadId) {
+        const onclick = flaggedEmail.getAttribute('onclick') || flaggedEmail.getAttribute('jsaction');
+        if (onclick) {
+          const match = onclick.match(/thread[_-]?id['":][\s]*['"]?([a-zA-Z0-9]+)/i);
+          if (match) threadId = match[1];
+        }
+      }
+      
+      // Method 5: Check for href attributes in child links
+      if (!threadId) {
+        const links = flaggedEmail.querySelectorAll('a[href]');
+        for (const link of links) {
+          const href = link.getAttribute('href');
+          const match = href.match(/[#&?]thread[_-]?id=([a-zA-Z0-9]+)/i) || 
+                       href.match(/[#&?]th=([a-zA-Z0-9]+)/i);
+          if (match) {
+            threadId = match[1];
+            break;
+          }
+        }
+      }
       
       if (!threadId) {
-        alert('Cannot find thread ID of flagged email.');
+        alert('Cannot find thread ID of flagged email. Check console for debug info.');
         return;
       }
+      
+      console.log('Found thread ID:', threadId);
 
       // Get the message ID for individual email (more specific than thread)
       const messageId = flaggedEmail.getAttribute('data-message-id');
