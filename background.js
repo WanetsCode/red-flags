@@ -119,48 +119,162 @@ chrome.action.onClicked.addListener((tab) => {
 
       // Helper: get the 'ik' parameter from Gmail URL (required for raw view)
       function getIK() {
+        // Method 1: Check URL parameters
         const params = new URLSearchParams(window.location.search);
         let ik = params.get('ik');
+        console.log('Method 1 - URL params ik:', ik);
         
-        // If not in URL params, try to extract from Gmail's internal data
-        if (!ik) {
-          const match = window.location.href.match(/[?&]ik=([^&]+)/);
-          ik = match ? match[1] : '';
+        // Method 2: Check URL hash parameters
+        if (!ik && window.location.hash) {
+          const hashParams = new URLSearchParams(window.location.hash.substring(1));
+          ik = hashParams.get('ik');
+          console.log('Method 2 - Hash params ik:', ik);
         }
         
-        // Last resort: try to find it in Gmail's global variables
-        if (!ik && window.GM_SPT_ENABLED) {
+        // Method 3: Extract from full URL
+        if (!ik) {
+          const match = window.location.href.match(/[?&#]ik=([^&]+)/);
+          ik = match ? match[1] : null;
+          console.log('Method 3 - URL regex ik:', ik);
+        }
+        
+        // Method 4: Look for ik in Gmail's global variables
+        if (!ik) {
+          try {
+            // Check if Gmail exposes the ik in window variables
+            if (window.GM_PARAMS && window.GM_PARAMS.ik) {
+              ik = window.GM_PARAMS.ik;
+              console.log('Method 4 - GM_PARAMS ik:', ik);
+            }
+          } catch (e) {
+            console.warn('Could not access GM_PARAMS:', e);
+          }
+        }
+        
+        // Method 5: Try to extract from Gmail's data attributes
+        if (!ik) {
           try {
             const gmailData = document.querySelector('[data-initial-dir]');
             if (gmailData) {
               const dataStr = gmailData.getAttribute('data-initial-dir');
               const ikMatch = dataStr.match(/ik[=:]([^&,}]+)/);
-              if (ikMatch) ik = ikMatch[1];
+              if (ikMatch) {
+                ik = ikMatch[1];
+                console.log('Method 5 - data-initial-dir ik:', ik);
+              }
             }
           } catch (e) {
             console.warn('Could not extract ik from Gmail data:', e);
           }
         }
         
+        // Method 6: Look for ik in script tags or other DOM elements
+        if (!ik) {
+          try {
+            const scripts = document.querySelectorAll('script');
+            for (const script of scripts) {
+              const content = script.textContent || script.innerHTML;
+              const match = content.match(/["']ik["']:\s*["']([^"']+)["']/);
+              if (match) {
+                ik = match[1];
+                console.log('Method 6 - script content ik:', ik);
+                break;
+              }
+            }
+          } catch (e) {
+            console.warn('Could not extract ik from scripts:', e);
+          }
+        }
+        
+        // Method 7: Try alternative Gmail session parameters
+        if (!ik) {
+          try {
+            // Some Gmail setups use different parameter names
+            const alternativeParams = ['at', 'session', 'auth', 'key'];
+            for (const param of alternativeParams) {
+              const value = new URLSearchParams(window.location.search).get(param);
+              if (value) {
+                console.log(`Method 7 - Found alternative param ${param}:`, value);
+                ik = value; // Try using this as ik
+                break;
+              }
+            }
+          } catch (e) {
+            console.warn('Could not find alternative params:', e);
+          }
+        }
+        
+        // Method 8: Generate a dummy request to get the ik
+        if (!ik) {
+          try {
+            // Try to find any existing Gmail API calls in the page
+            const forms = document.querySelectorAll('form');
+            for (const form of forms) {
+              const action = form.getAttribute('action');
+              if (action && action.includes('ik=')) {
+                const match = action.match(/ik=([^&]+)/);
+                if (match) {
+                  ik = match[1];
+                  console.log('Method 8 - form action ik:', ik);
+                  break;
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('Could not extract ik from forms:', e);
+          }
+        }
+        
+        console.log('Final ik result:', ik);
         return ik;
       }
 
       const ik = getIK();
-      if (!ik) {
-        alert('Cannot extract Gmail session key (ik parameter). Try refreshing Gmail.');
-        return;
-      }
-
+      console.log('Extracted ik:', ik);
+      
       // Compose raw view URL
       const baseUrl = window.location.origin;
       let rawUrl;
       
-      if (messageId) {
-        // More specific URL for individual message
-        rawUrl = `${baseUrl}/mail/u/0/?ui=2&ik=${ik}&view=om&th=${threadId}&msg=${messageId}`;
+      if (ik) {
+        // Primary method: Use ik parameter
+        if (messageId) {
+          rawUrl = `${baseUrl}/mail/u/0/?ui=2&ik=${ik}&view=om&th=${threadId}&msg=${messageId}`;
+        } else {
+          rawUrl = `${baseUrl}/mail/u/0/?ui=2&ik=${ik}&view=om&th=${threadId}`;
+        }
       } else {
-        // Fallback to thread view
-        rawUrl = `${baseUrl}/mail/u/0/?ui=2&ik=${ik}&view=om&th=${threadId}`;
+        // Alternative method: Try different Gmail URLs that might not need ik
+        console.log('No ik found, trying alternative URLs');
+        
+        // Method 1: Try Gmail's print view (sometimes works without ik)
+        rawUrl = `${baseUrl}/mail/u/0/?ui=2&view=pt&th=${threadId}`;
+        
+        // Method 2: Try basic HTML view
+        const altUrl1 = `${baseUrl}/mail/u/0/h/?th=${threadId}`;
+        
+        // Method 3: Try mobile view
+        const altUrl2 = `${baseUrl}/mail/u/0/m/?th=${threadId}`;
+        
+        // Try the first alternative, and if it fails, provide other options
+        console.log('Trying print view URL:', rawUrl);
+        
+        // Open the first URL and also alert user about alternatives
+        window.open(rawUrl, '_blank');
+        
+        // Also try opening alternative URLs
+        setTimeout(() => {
+          console.log('Also trying HTML view:', altUrl1);
+          window.open(altUrl1, '_blank');
+        }, 1000);
+        
+        setTimeout(() => {
+          console.log('Also trying mobile view:', altUrl2);
+          window.open(altUrl2, '_blank');
+        }, 2000);
+        
+        alert(`Opened multiple tabs with thread ID: ${threadId}\nTry each one to find the raw email content.`);
+        return;
       }
 
       console.log('Opening raw email:', rawUrl);
