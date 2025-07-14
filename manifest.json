@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Red Flags",
+  "version": "1.0",
+  "description": "Highlights unread emails and flags them visually.",
+  "permissions": ["scripting"],
+  "host_permissions": ["https://mail.google.com/*"],
+  "action": {
+    "default_title": "Re-Flag Gmail"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "48": "icon.png"
+  }
+}
