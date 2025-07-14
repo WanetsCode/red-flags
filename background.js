@@ -16,25 +16,51 @@ chrome.action.onClicked.addListener((tab) => {
       // Try multiple methods to find thread ID
       let threadId = null;
       
-      // Method 1: Check various data attributes
-      const possibleAttributes = [
-        'data-legacy-thread-id',
-        'data-thread-id',
-        'data-thread-perm-id',
-        'data-threadid',
-        'jsdata'
-      ];
-      
-      for (const attr of possibleAttributes) {
-        const value = flaggedEmail.getAttribute(attr);
-        if (value) {
-          console.log(`Found ${attr}: ${value}`);
-          threadId = value;
-          break;
+      // Method 1: Extract from jslog attribute (Gmail's logging data)
+      const jslog = flaggedEmail.getAttribute('jslog');
+      if (jslog && !threadId) {
+        console.log('jslog:', jslog);
+        
+        // Look for base64 encoded data in jslog
+        const base64Match = jslog.match(/1:([A-Za-z0-9+/=]+)/);
+        if (base64Match) {
+          try {
+            const decoded = atob(base64Match[1]);
+            console.log('Decoded jslog data:', decoded);
+            
+            // Look for thread ID in the decoded data
+            const threadMatch = decoded.match(/"#thread-f:(\d+)"/);
+            if (threadMatch) {
+              threadId = threadMatch[1];
+              console.log('Found thread ID in jslog:', threadId);
+            }
+          } catch (e) {
+            console.warn('Could not decode jslog data:', e);
+          }
         }
       }
       
-      // Method 2: Check if it's in the jsdata attribute (Gmail sometimes stores data here)
+      // Method 2: Check various data attributes
+      if (!threadId) {
+        const possibleAttributes = [
+          'data-legacy-thread-id',
+          'data-thread-id',
+          'data-thread-perm-id',
+          'data-threadid',
+          'jsdata'
+        ];
+        
+        for (const attr of possibleAttributes) {
+          const value = flaggedEmail.getAttribute(attr);
+          if (value) {
+            console.log(`Found ${attr}: ${value}`);
+            threadId = value;
+            break;
+          }
+        }
+      }
+      
+      // Method 3: Check if it's in the jsdata attribute (Gmail sometimes stores data here)
       if (!threadId) {
         const jsdata = flaggedEmail.getAttribute('jsdata');
         if (jsdata) {
@@ -43,11 +69,11 @@ chrome.action.onClicked.addListener((tab) => {
         }
       }
       
-      // Method 3: Check parent elements
+      // Method 4: Check parent elements
       if (!threadId) {
         let parent = flaggedEmail.parentElement;
         while (parent && !threadId) {
-          for (const attr of possibleAttributes) {
+          for (const attr of ['data-legacy-thread-id', 'data-thread-id', 'data-thread-perm-id']) {
             const value = parent.getAttribute(attr);
             if (value) {
               threadId = value;
@@ -58,7 +84,7 @@ chrome.action.onClicked.addListener((tab) => {
         }
       }
       
-      // Method 4: Try to extract from onclick or other event handlers
+      // Method 5: Try to extract from onclick or other event handlers
       if (!threadId) {
         const onclick = flaggedEmail.getAttribute('onclick') || flaggedEmail.getAttribute('jsaction');
         if (onclick) {
@@ -67,7 +93,7 @@ chrome.action.onClicked.addListener((tab) => {
         }
       }
       
-      // Method 5: Check for href attributes in child links
+      // Method 6: Check for href attributes in child links
       if (!threadId) {
         const links = flaggedEmail.querySelectorAll('a[href]');
         for (const link of links) {
